@@ -10,6 +10,7 @@ venv/
 legacy_order_ecosystem.json
 new_system_targets.json
 STAKEHOLDER_VALIDATION_REPORT.md
+SCHEMA_DIAGRAM.md
 
 # OS / editor
 .DS_Store

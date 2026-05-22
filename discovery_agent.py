@@ -35,6 +35,7 @@ UNITY_REPO = ROOT / "unity"
 LEGACY_OUT = ROOT / "legacy_order_ecosystem.json"
 UNITY_OUT = ROOT / "new_system_targets.json"
 REPORT_OUT = ROOT / "STAKEHOLDER_VALIDATION_REPORT.md"
+DIAGRAM_OUT = ROOT / "SCHEMA_DIAGRAM.md"
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +341,143 @@ Return ONLY the Markdown report, no preamble.
 
 
 # ---------------------------------------------------------------------------
+# Schema visualization (deterministic, no LLM call)
+# ---------------------------------------------------------------------------
+
+_REL_ARROW = {
+    "explicit_fk": "||--o{",
+    "implicit_code_join": "}o..o{",
+    "shared_column": "}o--o{",
+    "unknown": "}o..o{",
+}
+
+
+def _sanitize(name: str) -> str:
+    """Mermaid entity names must be alphanumeric/underscore."""
+    return re.sub(r"[^A-Za-z0-9_]", "_", str(name)) if name else "unknown"
+
+
+def _legacy_diagram(legacy: dict) -> str:
+    primary = _sanitize(legacy.get("primary_order_table", "orders"))
+    lines = ["erDiagram"]
+    entities: dict[str, list[str]] = {primary: []}
+
+    for tbl in legacy.get("related_tables", []) or []:
+        name = _sanitize(tbl.get("name", ""))
+        if not name:
+            continue
+        entities.setdefault(name, [])
+        for col in tbl.get("columns_mapped", []) or []:
+            entities[name].append(_sanitize(col))
+        arrow = _REL_ARROW.get(tbl.get("relationship_type", "unknown"), "}o..o{")
+        label = (tbl.get("relationship_type", "rel") or "rel").replace("_", " ")
+        lines.append(f"    {primary} {arrow} {name} : \"{label}\"")
+
+    hs = legacy.get("hothservices_investigation", {}) or {}
+    if hs.get("hothservices_table_exists") and hs.get("table_name"):
+        hs_name = _sanitize(hs["table_name"])
+        entities.setdefault(hs_name, [])
+        lines.append(f"    {primary} }}o..o{{ {hs_name} : \"converts to (disjoint)\"")
+
+    for name, cols in entities.items():
+        unique_cols = list(dict.fromkeys(cols))[:8]
+        if unique_cols:
+            body = "\n".join(f"        string {c}" for c in unique_cols)
+            lines.append(f"    {name} {{\n{body}\n    }}")
+        else:
+            lines.append(f"    {name} {{\n        string id\n    }}")
+
+    return "\n".join(lines)
+
+
+def _unity_diagram(unity: dict) -> str:
+    lines = ["erDiagram"]
+    targets = {
+        "subscription_order_target": unity.get("subscription_order_target") or {},
+        "one_time_order_target": unity.get("one_time_order_target") or {},
+        "hothxproduct_target": unity.get("hothxproduct_target") or {},
+    }
+    for role, target in targets.items():
+        name = _sanitize(target.get("table_name") or role)
+        fields = target.get("required_fields") or []
+        body_lines = []
+        for f in fields[:10]:
+            fname = _sanitize(f.get("name", ""))
+            ftype = _sanitize(f.get("type", "string"))
+            if fname:
+                body_lines.append(f"        {ftype} {fname}")
+        body = "\n".join(body_lines) if body_lines else "        string id"
+        lines.append(f"    {name} {{\n{body}\n    }}")
+        for dep in (target.get("dependencies") or [])[:6]:
+            dep_name = _sanitize(dep)
+            lines.append(f"    {name} }}o--|| {dep_name} : \"depends on\"")
+    return "\n".join(lines)
+
+
+def _mapping_diagram(legacy: dict, unity: dict) -> str:
+    """Flowchart: legacy tables → unity targets."""
+    primary = _sanitize(legacy.get("primary_order_table", "orders"))
+    hs = legacy.get("hothservices_investigation", {}) or {}
+    hs_table = _sanitize(hs.get("table_name") or "hothservices_orders") if hs.get("hothservices_table_exists") else None
+
+    sub_target = _sanitize((unity.get("subscription_order_target") or {}).get("table_name") or "subscription_orders")
+    one_target = _sanitize((unity.get("one_time_order_target") or {}).get("table_name") or "transactional_orders")
+    hothx_target = _sanitize((unity.get("hothxproduct_target") or {}).get("table_name") or "hothx_products")
+
+    lines = ["flowchart LR"]
+    lines.append("    subgraph LEGACY[Legacy thehoth]")
+    lines.append(f"        L1[{primary}]")
+    if hs_table:
+        lines.append(f"        L2[{hs_table}]")
+    lines.append("    end")
+    lines.append("    subgraph UNITY[Unity targets]")
+    lines.append(f"        U1[{sub_target}]")
+    lines.append(f"        U2[{one_target}]")
+    lines.append(f"        U3[{hothx_target}]")
+    lines.append("    end")
+    lines.append("    L1 -->|subscription rows| U1")
+    lines.append("    L1 -->|one-time rows| U2")
+    lines.append("    L1 -->|HothX product_id range| U3")
+    if hs_table:
+        lines.append(f"    L2 -->|provisional → HothXProduct| U3")
+    return "\n".join(lines)
+
+
+def generate_schema_diagram(legacy: dict, unity: dict) -> str:
+    """Build Mermaid ER + flowchart diagrams from the two discovery JSON files."""
+    parts = [
+        "# Schema Diagrams",
+        "",
+        "Generated deterministically from `legacy_order_ecosystem.json` and "
+        "`new_system_targets.json`. View this file in any Markdown renderer "
+        "that supports Mermaid (GitHub, VSCode preview).",
+        "",
+        "## 1. Legacy ecosystem (thehoth)",
+        "",
+        "```mermaid",
+        _legacy_diagram(legacy),
+        "```",
+        "",
+        "## 2. Unity target schema",
+        "",
+        "```mermaid",
+        _unity_diagram(unity),
+        "```",
+        "",
+        "## 3. Legacy → Unity mapping",
+        "",
+        "```mermaid",
+        _mapping_diagram(legacy, unity),
+        "```",
+        "",
+    ]
+    out = "\n".join(parts)
+    DIAGRAM_OUT.write_text(out)
+    print(f"[+]   Wrote {DIAGRAM_OUT.name}")
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Function 4: Orchestrator
 # ---------------------------------------------------------------------------
 
@@ -353,6 +491,7 @@ async def run_discovery() -> None:
     legacy = await discover_legacy_order_ecosystem()
     unity = await determine_new_system_targets()
     await generate_validation_report(legacy, unity)
+    generate_schema_diagram(legacy, unity)
     print("\nDiscovery complete. Review the report before generating ETL.")
 
 
