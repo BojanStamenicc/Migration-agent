@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Generated discovery outputs
+legacy_order_ecosystem.json
+new_system_targets.json
+STAKEHOLDER_VALIDATION_REPORT.md
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Env
+.env
