@@ -357,7 +357,7 @@ def _sanitize(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_]", "_", str(name)) if name else "unknown"
 
 
-_MERMAID_INIT = "%%{init: {'theme':'neutral', 'themeVariables':{'fontSize':'20px'}, 'er':{'useMaxWidth':false}, 'flowchart':{'useMaxWidth':false, 'nodeSpacing':80, 'rankSpacing':100}}}%%"
+_MERMAID_INIT = "%%{init: {'theme':'base', 'themeVariables':{'background':'#ffffff','primaryColor':'#eef2ff','primaryTextColor':'#111','primaryBorderColor':'#334','lineColor':'#334','secondaryColor':'#fde68a','tertiaryColor':'#d1fae5','fontSize':'18px'}}}%%"
 
 
 def _legacy_diagram(legacy: dict) -> str:
