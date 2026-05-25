@@ -357,9 +357,12 @@ def _sanitize(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_]", "_", str(name)) if name else "unknown"
 
 
+_MERMAID_INIT = "%%{init: {'theme':'neutral', 'themeVariables':{'fontSize':'20px'}, 'er':{'useMaxWidth':false}, 'flowchart':{'useMaxWidth':false, 'nodeSpacing':80, 'rankSpacing':100}}}%%"
+
+
 def _legacy_diagram(legacy: dict) -> str:
     primary = _sanitize(legacy.get("primary_order_table", "orders"))
-    lines = ["erDiagram"]
+    lines = [_MERMAID_INIT, "erDiagram"]
     entities: dict[str, list[str]] = {primary: []}
 
     for tbl in legacy.get("related_tables", []) or []:
@@ -391,7 +394,7 @@ def _legacy_diagram(legacy: dict) -> str:
 
 
 def _unity_diagram(unity: dict) -> str:
-    lines = ["erDiagram"]
+    lines = [_MERMAID_INIT, "erDiagram"]
     targets = {
         "subscription_order_target": unity.get("subscription_order_target") or {},
         "one_time_order_target": unity.get("one_time_order_target") or {},
@@ -424,7 +427,7 @@ def _mapping_diagram(legacy: dict, unity: dict) -> str:
     one_target = _sanitize((unity.get("one_time_order_target") or {}).get("table_name") or "transactional_orders")
     hothx_target = _sanitize((unity.get("hothxproduct_target") or {}).get("table_name") or "hothx_products")
 
-    lines = ["flowchart LR"]
+    lines = [_MERMAID_INIT, "flowchart LR"]
     lines.append("    subgraph LEGACY[Legacy thehoth]")
     lines.append(f"        L1[{primary}]")
     if hs_table:
